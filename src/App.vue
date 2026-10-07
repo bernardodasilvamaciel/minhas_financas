@@ -1,196 +1,218 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { useFinanceStore } from './stores/financeStore'
+import { ref, watchEffect, onMounted, onBeforeUnmount } from 'vue'
+import { useFinance } from './stores/finance'
+import { sheets, openSheet, closeSheet } from './lib/sheets'
+import { codeFromHash, decodeCode } from './lib/sync'
 
-import SummaryBar    from './components/SummaryBar.vue'
-import IncomePanel   from './components/IncomePanel.vue'
-import FixedPanel    from './components/FixedPanel.vue'
-import DebtorPanel   from './components/DebtorPanel.vue'
-import CardPanel     from './components/CardPanel.vue'
-import ReportPanel   from './components/ReportPanel.vue'
-import AddModal      from './components/AddModal.vue'
+import MonthStrip from './components/MonthStrip.vue'
+import MonthView from './components/MonthView.vue'
+import CardsView from './components/CardsView.vue'
+import DataView from './components/DataView.vue'
+import Toast from './components/Toast.vue'
 
-const store = useFinanceStore()
+import EntrySheet from './components/sheets/EntrySheet.vue'
+import BalanceSheet from './components/sheets/BalanceSheet.vue'
+import CardSheet from './components/sheets/CardSheet.vue'
+import InvoiceSheet from './components/sheets/InvoiceSheet.vue'
+import ImportSheet from './components/sheets/ImportSheet.vue'
+import QrSheet from './components/sheets/QrSheet.vue'
+import ScanSheet from './components/sheets/ScanSheet.vue'
+import PasteSheet from './components/sheets/PasteSheet.vue'
 
-onMounted(() => {
-  store.load()
-  applyTheme()
-})
+const SHEETS = {
+  entry: EntrySheet, balance: BalanceSheet, card: CardSheet, invoice: InvoiceSheet,
+  import: ImportSheet, qr: QrSheet, scan: ScanSheet, paste: PasteSheet,
+}
+
+const store = useFinance()
+
+const TABS = [
+  { id: 'mes', label: 'Mês' },
+  { id: 'cartoes', label: 'Cartões' },
+  { id: 'dados', label: 'Dados' },
+]
+const tab = ref('mes')
+
+function go(id) {
+  tab.value = id
+  window.scrollTo({ top: 0 })
+}
+
+function quickAdd() {
+  openSheet('entry', { kind: 'purchase' })
+}
 
 // ── Theme ────────────────────────────────────────────────────────────────
-function applyTheme() {
-  document.body.classList.toggle('light', !store.darkMode)
-}
-function toggleTheme() {
-  store.toggleDarkMode()
-  applyTheme()
-}
-
-// ── Tabs ─────────────────────────────────────────────────────────────────
-const TABS = [
-  { id: 'income',  label: 'Entradas',  icon: '↑'  },
-  { id: 'fixed',   label: 'Fixos',     icon: '📌' },
-  { id: 'debtors', label: 'A Receber', icon: '↗'  },
-  { id: 'cards',   label: 'Cartões',   icon: '▣'  },
-  { id: 'reports', label: 'Relatórios',icon: '📊' },
-]
-const activeTab = ref('income')
-
-// ── Month navigation with slide direction ─────────────────────────────────
-const monthDir = ref(1)   // 1 = forward (left), -1 = backward (right)
-
-function changeMonth(step) {
-  monthDir.value = step
-  document.documentElement.style.setProperty('--month-dir', step > 0 ? '60px' : '-60px')
-  store.changeMonth(step)
-}
-
-const monthLabel = computed(() => {
-  const [y, m] = store.currentMonth.split('-')
-  return new Date(y, m - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+watchEffect(() => {
+  const t = store.prefs.theme
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme')
+  else document.documentElement.setAttribute('data-theme', t)
 })
 
-// ── Modal ─────────────────────────────────────────────────────────────────
-const showModal   = ref(false)
-const modalPreset = ref(null)
-function openAdd(preset = null) { modalPreset.value = preset; showModal.value = true }
+// ── Lock page scroll behind sheets ───────────────────────────────────────
+watchEffect(() => {
+  document.documentElement.style.overflow = sheets.length ? 'hidden' : ''
+})
 
-// ── File restore ──────────────────────────────────────────────────────────
-const fileInput = ref(null)
-function handleRestore(e) {
-  const file = e.target.files[0]
-  if (file) { store.importJSON(file); e.target.value = '' }
+// ── Keep sheets above the on-screen keyboard (iOS overlays it) ───────────
+function syncViewport() {
+  const vv = window.visualViewport
+  if (!vv) return
+  const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+  document.documentElement.style.setProperty('--kb', `${kb}px`)
+  document.documentElement.style.setProperty('--vvh', `${vv.height}px`)
 }
+
+// ── Data arriving through a link: …/#importar=CODE ───────────────────────
+async function importFromHash() {
+  const code = codeFromHash()
+  if (!code) return
+  history.replaceState(null, '', location.pathname + location.search)
+  try {
+    openSheet('import', { incoming: await decodeCode(code), source: 'link' })
+  } catch (e) {
+    store.notify(e.message || 'Não deu para ler os dados do link.')
+  }
+}
+
+onMounted(() => {
+  window.visualViewport?.addEventListener('resize', syncViewport)
+  window.visualViewport?.addEventListener('scroll', syncViewport)
+  syncViewport()
+  importFromHash()
+  window.addEventListener('hashchange', importFromHash)
+  if (store.migratedFrom) {
+    store.notify('Seus dados antigos foram trazidos para a versão nova.')
+    store.migratedFrom = null
+  }
+})
+onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener('resize', syncViewport)
+  window.visualViewport?.removeEventListener('scroll', syncViewport)
+  window.removeEventListener('hashchange', importFromHash)
+})
 </script>
 
 <template>
-  <div class="page">
-    <div class="app-shell">
+  <div class="app">
+    <header class="top">
+      <span class="wordmark">minhas finanças</span>
+      <button
+        class="icon-btn" :aria-pressed="store.prefs.hidden"
+        :aria-label="store.prefs.hidden ? 'Mostrar valores' : 'Esconder valores'"
+        @click="store.prefs.hidden = !store.prefs.hidden"
+      >
+        <svg v-if="!store.prefs.hidden" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+        <svg v-else width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6A17.6 17.6 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+      </button>
+    </header>
 
-      <!-- ── Top bar ──────────────────────────────────────────────────── -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <span class="logo">fin<b>vue</b></span>
+    <MonthStrip v-if="tab !== 'dados'" />
 
-          <div class="month-nav">
-            <button class="month-arrow" @click="changeMonth(-1)">‹</button>
-            <Transition name="fade" mode="out-in">
-              <span class="month-text" :key="store.currentMonth">{{ monthLabel }}</span>
-            </Transition>
-            <button class="month-arrow" @click="changeMonth(1)">›</button>
-          </div>
-        </div>
+    <main class="main">
+      <Transition name="fade" mode="out-in">
+        <MonthView v-if="tab === 'mes'" key="mes" />
+        <CardsView v-else-if="tab === 'cartoes'" key="cartoes" />
+        <DataView v-else key="dados" />
+      </Transition>
+    </main>
 
-        <div class="topbar-right">
-          <button class="btn-icon theme-btn" @click="toggleTheme"
-            :title="store.darkMode ? 'Modo claro' : 'Modo escuro'">
-            {{ store.darkMode ? '☀️' : '🌙' }}
-          </button>
-          <button class="btn-icon" @click="store.togglePrivacy"
-            :title="store.privacyMode ? 'Mostrar' : 'Ocultar'">
-            {{ store.privacyMode ? '🙈' : '👁' }}
-          </button>
-          <button class="btn btn-ghost" @click="openAdd()">+ Adicionar</button>
-          <button class="btn btn-ghost" @click="store.exportJSON">Exportar</button>
-          <button class="btn btn-ghost" @click="fileInput.click()">Restaurar</button>
-          <input ref="fileInput" type="file" accept=".json" style="display:none" @change="handleRestore">
-        </div>
-      </header>
+    <nav class="nav" aria-label="Seções">
+      <button
+        v-for="(t, i) in TABS" :key="t.id"
+        class="nav-btn" :class="{ 'after-fab': i === 2 }"
+        :aria-current="tab === t.id ? 'page' : undefined"
+        @click="go(t.id)"
+      >
+        <svg v-if="t.id === 'mes'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 9h14M5 15h14" /></svg>
+        <svg v-else-if="t.id === 'cartoes'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2.5" /><path d="M3 10h18" /></svg>
+        <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L4 7l3 3M4 7h12M17 20l3-3-3-3M20 17H8" /></svg>
+        <span>{{ t.label }}</span>
+      </button>
+      <button class="fab" aria-label="Adicionar" @click="quickAdd">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+      </button>
+    </nav>
 
-      <!-- ── Summary ──────────────────────────────────────────────────── -->
-      <SummaryBar />
+    <TransitionGroup name="sheet" :duration="{ enter: 320, leave: 220 }">
+      <component
+        :is="SHEETS[s.type]" v-for="s in sheets" :key="s.key"
+        v-bind="s.props" :sheet-key="s.key"
+        @close="closeSheet(s.key)"
+      />
+    </TransitionGroup>
 
-      <!-- ── Tabs ─────────────────────────────────────────────────────── -->
-      <nav class="tab-nav">
-        <button
-          v-for="tab in TABS" :key="tab.id"
-          class="tab-btn" :class="{ active: activeTab === tab.id }"
-          @click="activeTab = tab.id"
-        >
-          <span class="tab-icon">{{ tab.icon }}</span>
-          <span class="tab-label">{{ tab.label }}</span>
-        </button>
-      </nav>
-
-      <!-- ── Content with month slide animation ───────────────────────── -->
-      <main class="content">
-        <Transition name="fade" mode="out-in">
-          <IncomePanel  v-if="activeTab === 'income'"   key="income"   @add="openAdd('income')"  />
-          <FixedPanel   v-else-if="activeTab === 'fixed'"   key="fixed"   @add="openAdd('fixed')"   />
-          <DebtorPanel  v-else-if="activeTab === 'debtors'" key="debtors" @add="openAdd('debtor')"  />
-          <CardPanel    v-else-if="activeTab === 'cards'"   key="cards"   @add="openAdd('credit')"  />
-          <ReportPanel  v-else-if="activeTab === 'reports'" key="reports" />
-        </Transition>
-      </main>
-
-      <AddModal v-if="showModal" :preset="modalPreset" @close="showModal = false" />
-    </div>
+    <Toast />
   </div>
 </template>
 
 <style scoped>
-.page {
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  background: var(--bg);
+.app {
+  max-width: 640px; margin: 0 auto;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 32px);
 }
-.app-shell {
-  width: 100%;
-  max-width: 900px;
-  padding: 0 20px 60px;
-}
-
-/* ── Topbar ───────────────────────────────────────────────────────────── */
-.topbar {
+.top {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 22px 0 18px; gap: 12px; flex-wrap: wrap;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 8px 0 var(--gutter);
 }
-.topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; }
-
-.logo { font-size: 1.2rem; color: var(--ink3); letter-spacing: -.02em; }
-.logo b { color: var(--accent); font-weight: 700; }
-
-/* ── Month nav ────────────────────────────────────────────────────────── */
-.month-nav { display: flex; align-items: center; gap: 6px; }
-.month-arrow {
-  width: 32px; height: 32px; border-radius: 50%;
-  border: 1.5px solid var(--border2); background: var(--surface2);
-  color: var(--ink2); font-size: 1.15rem; line-height: 1;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all .18s;
+.wordmark {
+  font-family: var(--f-display); font-stretch: 80%;
+  font-size: 18px; font-weight: 700; letter-spacing: -.01em;
 }
-.month-arrow:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-.month-text {
-  font-size: .82rem; font-weight: 600;
-  min-width: 148px; text-align: center;
-  text-transform: capitalize; color: var(--ink);
-  background: var(--surface); border: 1.5px solid var(--border2);
-  border-radius: 99px; padding: 6px 16px;
-  display: inline-block;
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--ink-2);
 }
+.icon-btn:active { background: var(--sunken); }
+.main { padding: 0 var(--gutter); }
 
-/* ── Theme btn ────────────────────────────────────────────────────────── */
-.theme-btn { font-size: .9rem; }
-
-/* ── Tabs ─────────────────────────────────────────────────────────────── */
-.tab-nav {
-  display: flex; gap: 2px;
-  background: var(--surface); border: 1.5px solid var(--border2);
-  border-radius: var(--radius); padding: 4px; margin-bottom: 20px;
+/* ── Bottom navigation ─────────────────────────────────────────────────── */
+.nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  height: calc(var(--nav-h) + var(--safe-b));
+  padding: 0 8px var(--safe-b);
+  background: color-mix(in srgb, var(--sheet) 92%, transparent);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border-top: 1px solid var(--rule);
+  display: grid; grid-template-columns: 1fr 1fr 84px 1fr; align-items: center;
 }
-.tab-btn {
-  flex: 1; height: 36px; border: none; border-radius: var(--radius-sm);
-  background: transparent; color: var(--ink3);
-  font-size: .78rem; font-weight: 600;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  cursor: pointer; transition: all .18s;
+.nav-btn {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--ink-3); font-size: 12px; font-weight: 600;
 }
-.tab-btn:hover  { color: var(--ink); background: var(--surface2); }
-.tab-btn.active { background: var(--accent); color: #fff; }
-.tab-icon { font-size: .88rem; }
-@media (max-width: 560px) { .tab-label { display: none; } }
+.nav-btn.after-fab { grid-column: 4; }
+.nav-btn[aria-current="page"] { color: var(--ink); }
+.fab {
+  grid-column: 3; grid-row: 1; justify-self: center;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: var(--ink); color: var(--paper);
+  display: grid; place-items: center;
+  transform: translateY(-14px);
+  box-shadow: 0 6px 18px -6px rgba(20, 32, 48, .5), 0 0 0 5px var(--paper);
+  transition: transform .12s ease;
+}
+.fab:active { transform: translateY(-14px) scale(.94); }
 
-/* ── Content ──────────────────────────────────────────────────────────── */
-.content { position: relative; min-height: 300px; }
+@media (min-width: 640px) {
+  .nav {
+    left: 50%; right: auto; bottom: 16px; transform: translateX(-50%);
+    width: 420px; height: var(--nav-h); padding: 0 8px;
+    border: 1px solid var(--rule); border-radius: 999px; box-shadow: var(--shadow);
+  }
+  .fab { transform: none; box-shadow: none; width: 52px; height: 52px; }
+  .fab:active { transform: scale(.94); }
+}
+</style>
+
+<style>
+/* Sheet enter/leave (applies to the sheet root rendered by <TransitionGroup>) */
+.sheet-enter-active .scrim, .sheet-leave-active .scrim { transition: opacity .25s ease; }
+.sheet-enter-from .scrim, .sheet-leave-to .scrim { opacity: 0; }
+.sheet-enter-active .panel { transition: transform .32s cubic-bezier(.2, .9, .25, 1), opacity .2s; }
+.sheet-leave-active .panel { transition: transform .22s ease-in, opacity .2s; }
+.sheet-enter-from .panel, .sheet-leave-to .panel { transform: translateY(100%); }
+@media (min-width: 640px) {
+  .sheet-enter-from .panel, .sheet-leave-to .panel { transform: translateY(24px) scale(.98); opacity: 0; }
+}
 </style>

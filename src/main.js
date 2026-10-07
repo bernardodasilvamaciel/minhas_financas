@@ -1,8 +1,15 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import App from './App.vue'
+import '@fontsource-variable/bricolage-grotesque/standard.css'
+import '@fontsource-variable/onest/index.css'
+import '@fontsource-variable/martian-mono/standard.css'
 import './style/main.css'
+import App from './App.vue'
 
-const app = createApp(App)
-app.use(createPinia())
-app.mount('#app')
+createApp(App).use(createPinia()).mount('#app')
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* offline support is optional */ })
+  })
+}

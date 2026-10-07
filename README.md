@@ -1,38 +1,52 @@
-# gastos_2026
+# Minhas finanças
 
-This template should help get you started developing with Vue 3 in Vite.
+Responde uma pergunta: **quanto sobra no fim do mês depois de pagar todas as faturas e contas?**
 
-## Recommended IDE Setup
+Feito para quem gasta no crédito num mês e paga no seguinte. Funciona no celular e no computador, sem servidor: os dados ficam no navegador (localStorage).
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+## Como usar
 
-## Recommended Browser Setup
+1. **Quanto você tem hoje**: toque em "Tenho agora" na tela do mês.
+2. **O que entra**: salário e outras entradas (podem repetir todo mês).
+3. **Cartões**: cadastre com o dia de fechamento e de vencimento.
+4. **Botão +**: lance cada compra. Digite o valor, escolha o cartão e as parcelas; o app põe cada parcela na fatura certa.
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
+A tela do mês mostra a conta inteira:
 
-## Customize configuration
+```
+  Tenho agora (ou: sobra do mês anterior)
++ Entradas
++ Me devem
+− Faturas
+− Contas
+= Sobra
+```
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+A faixa de meses no topo mostra quanto sobra no fim de cada mês, já contando as parcelas futuras.
 
-## Project Setup
+Quando você paga ou recebe algo, marque o círculo. O app entende que esse dinheiro já saiu (ou entrou) do "Tenho agora" e não conta de novo.
+
+## Levar os dados para o celular
+
+Na aba **Dados**:
+
+- **Enviar link**: gera um link com todos os dados. Abra no outro aparelho e confirme.
+- **Mostrar QR code**: lido pelo app no outro aparelho (Dados → Escanear QR code). Se os dados forem grandes, o QR é dividido em partes que vão passando na tela.
+- **Copiar código**: um texto para colar no outro aparelho (Dados → Colar código).
+- **Arquivo de backup**: um `.json` para guardar ou mandar. Também abre backups da versão antiga.
+
+Ao receber, você escolhe entre **juntar** (fica o mais recente de cada lado) ou **substituir tudo**.
+
+> O link e a câmera precisam que o app esteja publicado num endereço `https` (GitHub Pages, Netlify, Vercel…).
+> Abrindo por `localhost`, o link só funciona no próprio computador. Use o código ou o arquivo.
+
+## Desenvolvimento
 
 ```sh
 npm install
+npm run dev           # http://localhost:5173
+npm run dev:celular   # expõe na rede local para abrir no celular (mesmo Wi-Fi)
+npm run build         # gera dist/, pode ser servido de qualquer pasta
 ```
 
-### Compile and Hot-Reload for Development
-
-```sh
-npm run dev
-```
-
-### Compile and Minify for Production
-
-```sh
-npm run build
-```
+Vue 3 + Pinia + Vite. Os dados da versão antiga (`finvue_v10`) são migrados automaticamente na primeira abertura, e a chave antiga continua guardada como cópia de segurança.
