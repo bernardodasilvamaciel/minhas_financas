@@ -1,0 +1,9 @@
+{
+  // Publicação na Cloudflare (Workers com arquivos estáticos).
+  // O nome precisa ser igual ao nome do projeto no painel da Cloudflare.
+  "name": "minhas-financas",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
