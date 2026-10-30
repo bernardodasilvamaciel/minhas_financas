@@ -40,7 +40,6 @@ const cards = computed(() => store.data.cards)
 const lastCard = cards.value.find(c => c.id === store.prefs.lastCardId)
 const cardId = ref(props.cardId || lastCard?.id || cards.value[0]?.id || null)
 const installments = ref(1)
-const perInstallment = ref(false)
 const invoiceMonth = ref(props.invoiceMonth || defaultInvoiceMonth(cards.value.find(c => c.id === cardId.value)))
 let invoiceTouched = !!props.invoiceMonth
 
@@ -69,9 +68,9 @@ function touchInvoice(v) { invoiceMonth.value = v; invoiceTouched = true }
 
 // ── Derived ────────────────────────────────────────────────────────────────
 const selectedCard = computed(() => cards.value.find(c => c.id === cardId.value))
-const total = computed(() =>
-  kind.value === 'purchase' && perInstallment.value ? fromCents(toCents(amount.value) * installments.value) : amount.value)
-const installmentValue = computed(() => fromCents(Math.floor(toCents(total.value) / installments.value)))
+// Purchases are typed by their total, like in the bank app; each option shows what one installment comes to.
+const perInstallment = n => fromCents(Math.floor(toCents(amount.value) / n))
+const installmentsShown = ref(Math.max(12, installments.value))
 const isRecurringEdit = editing && kind.value !== 'purchase' && record?.repeat
 const amountChanged = computed(() => toCents(amount.value) !== toCents(originalAmount))
 
@@ -140,7 +139,7 @@ function submit() {
 
   if (kind.value === 'purchase') {
     const payload = {
-      cardId: cardId.value, description: desc || 'Compra', amount: total.value,
+      cardId: cardId.value, description: desc || 'Compra', amount: amount.value,
       installments: installments.value, invoiceMonth: invoiceMonth.value,
       person: forOther.value ? (person.value.trim() || 'Outra pessoa') : '',
     }
@@ -193,17 +192,15 @@ function remove(scopeChoice = 'all') {
       </div>
 
       <div class="field-block">
+        <span v-if="kind === 'purchase'" class="field-label" aria-hidden="true">Valor total da compra</span>
         <MoneyInput
           v-model="amount" big :autofocus="!editing"
-          :label="kind === 'purchase' && perInstallment ? 'Valor da parcela' : 'Valor'"
+          :label="kind === 'purchase' ? 'Valor total da compra' : 'Valor'"
           @enter="focusDescription"
         />
-        <div v-if="kind === 'purchase' && installments > 1" class="split">
-          <span class="num">{{ perInstallment ? `Total ${brl(total)}` : `${installments}x de ${brl(installmentValue)}` }}</span>
-          <button type="button" class="link" @click="perInstallment = !perInstallment">
-            {{ perInstallment ? 'Digitar o total' : 'Digitar o valor da parcela' }}
-          </button>
-        </div>
+        <p v-if="kind === 'purchase' && installments > 1" class="split num">
+          {{ installments }}x de {{ brl(perInstallment(installments)) }}
+        </p>
       </div>
 
       <!-- Who (receivable) -->
@@ -251,19 +248,26 @@ function remove(scopeChoice = 'all') {
           </div>
         </div>
 
-        <div class="field-block row-2">
-          <div>
-            <span class="field-label">Parcelas</span>
-            <div class="stepper">
-              <button type="button" aria-label="Menos parcelas" :disabled="installments <= 1" @click="installments--">−</button>
-              <output class="num" aria-live="polite">{{ installments }}x</output>
-              <button type="button" aria-label="Mais parcelas" :disabled="installments >= 48" @click="installments++">+</button>
-            </div>
+        <div class="field-block">
+          <span class="field-label">Em quantas vezes</span>
+          <div class="installments" role="radiogroup" aria-label="Em quantas vezes">
+            <button
+              v-for="n in installmentsShown" :key="n" type="button"
+              class="inst" role="radio" :aria-checked="installments === n" @click="installments = n"
+            >
+              <span class="inst-n">{{ n }}x</span>
+              <span v-if="amount > 0" class="inst-v num">{{ brl(perInstallment(n)) }}</span>
+            </button>
+            <button
+              v-if="installmentsShown < 48" type="button" class="inst more"
+              @click="installmentsShown = Math.min(48, installmentsShown + 12)"
+            >Mais</button>
           </div>
-          <div>
-            <span class="field-label">{{ installments > 1 ? '1ª parcela na fatura de' : 'Entra na fatura de' }}</span>
-            <MonthPicker :model-value="invoiceMonth" @update:model-value="touchInvoice" />
-          </div>
+        </div>
+
+        <div class="field-block">
+          <span class="field-label">{{ installments > 1 ? '1ª parcela na fatura de' : 'Entra na fatura de' }}</span>
+          <MonthPicker :model-value="invoiceMonth" @update:model-value="touchInvoice" />
         </div>
         <p v-if="selectedCard" class="hint tight">
           <template v-if="selectedCard.closingDay">O {{ selectedCard.name }} fecha dia {{ selectedCard.closingDay }}, por isso essa fatura.</template>
@@ -322,17 +326,28 @@ function remove(scopeChoice = 'all') {
 .kinds .chip { flex: 1 1 auto; justify-content: center; min-width: 0; padding: 0 6px; font-size: 14.5px; white-space: nowrap; }
 .field-block { display: flex; flex-direction: column; gap: 10px; }
 .field-block > .field-label { margin-bottom: -2px; }
-.split { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 15px; color: var(--ink-2); }
-.split .link { font-size: 14px; padding: 4px 0; }
+.split { font-size: 15px; color: var(--ink-2); }
 .chip.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
 .new-card { display: flex; gap: 8px; align-items: center; }
-.row-2 { display: grid; grid-template-columns: auto 1fr; gap: 14px; }
-.row-2 .field-label { margin-bottom: 8px; }
-.stepper { display: flex; align-items: center; background: var(--sunken); border-radius: 999px; padding: 4px; }
-.stepper button { width: 42px; height: 42px; border-radius: 50%; font-size: 22px; color: var(--ink-2); }
-.stepper button:active { background: var(--sheet); }
-.stepper button:disabled { opacity: .3; }
-.stepper output { min-width: 40px; text-align: center; font-weight: 600; }
+.installments {
+  display: flex; gap: 8px;
+  overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+  padding: 2px 2px 4px; margin: -2px -2px -4px;
+}
+.installments::-webkit-scrollbar { display: none; }
+.inst {
+  flex: none; min-width: 64px; min-height: 54px; padding: 6px 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: var(--r-md);
+  background: var(--sunken); color: var(--ink-2);
+  scroll-snap-align: start;
+  transition: background-color .15s, color .15s;
+}
+.inst-n { font-weight: 650; font-size: 16px; color: var(--ink); }
+.inst-v { font-size: 12px; white-space: nowrap; }
+.inst[aria-checked="true"] { background: var(--ink); color: var(--paper); }
+.inst[aria-checked="true"] .inst-n { color: var(--paper); }
+.inst.more { font-size: 14px; font-weight: 600; color: var(--blue); background: transparent; box-shadow: inset 0 0 0 1.5px var(--rule-strong); }
 .hint.tight { margin-top: -10px; }
 .field-block > .hint { margin-top: 0; }
 .hint.warn { color: var(--blue); font-weight: 500; }

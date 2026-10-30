@@ -28,6 +28,17 @@ export const KINDS = {
 
 export const CARD_COLORS = ['#6D3FD1', '#E2552F', '#1F7A5A', '#1F4FD1', '#C2185B', '#2B2F36', '#D49A00', '#00838F']
 
+/** Light card colors (gold, orange) need dark text on top of them; the rest take white. */
+export function cardIsLight(hex) {
+  const m = /^#([\da-f]{6})$/i.exec(hex || '')
+  if (!m) return false
+  const [r, g, b] = [0, 2, 4].map(i => {
+    const c = parseInt(m[1].slice(i, i + 2), 16) / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.2
+}
+
 export const uid = () =>
   Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 7)
 

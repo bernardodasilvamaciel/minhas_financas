@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useFinance } from '../../stores/finance'
 import { CARD_COLORS } from '../../lib/finance'
 import Sheet from '../ui/Sheet.vue'
+import CreditCard from '../ui/CreditCard.vue'
 
 const props = defineProps({ id: { type: String, default: null } })
 const emit = defineEmits(['close'])
@@ -45,6 +46,11 @@ function remove() {
 <template>
   <Sheet :title="card ? 'Editar cartão' : 'Novo cartão'" @close="emit('close')">
     <form class="form" @submit.prevent="save">
+      <CreditCard
+        class="preview" :name="name.trim()" :color="color"
+        :closing-day="day(closingDay)" :due-day="day(dueDay)"
+      />
+
       <div>
         <label class="field-label" for="card-name">Nome</label>
         <input id="card-name" v-model="name" class="field" placeholder="Nubank, Inter, Itaú…" :autofocus="!card" autocomplete="off">
@@ -95,6 +101,7 @@ function remove() {
 
 <style scoped>
 .form { display: flex; flex-direction: column; gap: 20px; padding-top: 4px; }
+.preview { max-width: 300px; align-self: center; }
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .swatch {
   width: 40px; height: 40px; border-radius: 50%;
