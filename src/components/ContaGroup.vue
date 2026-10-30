@@ -6,7 +6,7 @@ defineProps({
   op: { type: String, required: true },          // '+' | '−'
   label: { type: String, required: true },
   total: { type: Number, required: true },
-  rows: { type: Array, required: true },         // { key, title, sub, amount, done, color, toggle(), open() }
+  rows: { type: Array, required: true },         // { key, title, sub, amount, done, warn, color, toggle(), open() }
   collapsed: Boolean,
   progress: { type: String, default: '' },
   addLabel: { type: String, required: true },
@@ -37,7 +37,7 @@ const { p } = useFmt()
             <span class="row-title">
               <span v-if="r.color" class="dot" :style="{ background: r.color }" />{{ r.title }}
             </span>
-            <span v-if="r.sub || r.done" class="row-sub">
+            <span v-if="r.sub || r.done" class="row-sub" :class="{ warn: r.warn }">
               <template v-if="r.done">{{ doneWord }}<template v-if="r.sub"> · </template></template>{{ r.sub }}
             </span>
           </span>
@@ -86,8 +86,9 @@ const { p } = useFmt()
 .row-sub { font-size: 13.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the value column lines up with the group totals above (chevron width + gap) */
 .row-val { font-size: 15px; color: var(--ink-2); flex: none; margin-right: 28px; }
+.row-sub.warn { color: var(--blue); font-weight: 500; }
+/* done is only a checklist mark: the value still counts, so it is dimmed but not struck through */
 .done .row-title, .done .row-val { color: var(--ink-3); }
-.done .row-val { text-decoration: line-through; text-decoration-thickness: 1.5px; }
 
 .add { padding-top: 2px; }
 .add .link { font-size: 15px; min-height: 44px; }

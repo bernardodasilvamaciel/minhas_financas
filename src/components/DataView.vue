@@ -152,7 +152,8 @@ const THEMES = [
       <p>Cada mês começa com o que sobrou do mês anterior. No mês atual, começa com o “Tenho agora”.</p>
       <p>Soma o que entra (salário, quem te deve) e tira o que sai (faturas e contas). O resultado é o que sobra no fim do mês, e passa para o próximo.</p>
       <p>Compras parceladas aparecem em cada fatura, uma parcela por mês. A fatura em que a compra cai depende do dia de fechamento do cartão.</p>
-      <p>Quando você marca algo como pago ou recebido, o app entende que o dinheiro já saiu ou entrou, e que isso já está no “Tenho agora”. Por isso não conta de novo.</p>
+      <p>O que repete todo mês usa o valor do mês anterior como previsão. Quando o mês chega, o app pergunta se o valor foi o mesmo ou outro.</p>
+      <p>Marcar como pago ou recebido é só para acompanhar: o valor continua na conta. Por isso, o “Tenho agora” não deve incluir o que já está nas entradas e contas do mês.</p>
     </details>
 
     <section class="box danger">

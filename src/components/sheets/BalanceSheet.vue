@@ -23,7 +23,7 @@ function save() {
         Some o que está na conta com o que você guardou e pode usar para pagar as contas.
       </p>
       <p class="hint">
-        Depois, sempre que pagar algo, marque como pago na conta do mês. O que está marcado não é descontado de novo daqui.
+        Tudo o que está nas entradas e contas do mês é somado ou descontado deste valor, mesmo marcado como recebido ou pago. Então não inclua aqui o que já está lá.
       </p>
     </div>
     <template #footer>

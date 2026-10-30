@@ -18,10 +18,11 @@ import ImportSheet from './components/sheets/ImportSheet.vue'
 import QrSheet from './components/sheets/QrSheet.vue'
 import ScanSheet from './components/sheets/ScanSheet.vue'
 import PasteSheet from './components/sheets/PasteSheet.vue'
+import ValueSheet from './components/sheets/ValueSheet.vue'
 
 const SHEETS = {
   entry: EntrySheet, balance: BalanceSheet, card: CardSheet, invoice: InvoiceSheet,
-  import: ImportSheet, qr: QrSheet, scan: ScanSheet, paste: PasteSheet,
+  import: ImportSheet, qr: QrSheet, scan: ScanSheet, paste: PasteSheet, value: ValueSheet,
 }
 
 const store = useFinance()

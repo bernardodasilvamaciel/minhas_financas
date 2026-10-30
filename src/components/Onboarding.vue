@@ -17,7 +17,7 @@ const steps = computed(() => [
     label: 'O que entra todo mês',
     hint: 'salário, por exemplo',
     done: store.data.items.some(i => i.kind === 'income'),
-    go: () => openSheet('entry', { kind: 'income', month: store.selected }),
+    go: () => openSheet('entry', { kind: 'income', month: store.selected, repeat: true }),
   },
   {
     label: 'Seus cartões',

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
-import { emptyData, uid, projection, dataMonths, defaultInvoiceMonth } from '../lib/finance'
+import { emptyData, uid, projection, dataMonths, defaultInvoiceMonth, itemAmount } from '../lib/finance'
 import { loadData, saveData, loadPrefs, savePrefs, normalize } from '../lib/storage'
 import { mergeData } from '../lib/sync'
 import { monthKey, addMonths, todayISO } from '../lib/months'
@@ -169,34 +169,42 @@ export const useFinance = defineStore('finance', () => {
     }))
   }
 
-  /**
-   * scope only matters for recurring items when the amount changes:
-   *  'month'   → just this month
-   *  'forward' → this month and every month after
-   */
-  function updateItem(id, { amount, scope = 'forward', month, itemMonth, ...rest }) {
+  // A recurring item's value for month m; the months after it repeat it until they get their own.
+  function setValue(it, m, amount) {
+    if (m === it.month) { it.amount = amount; delete it.overrides[m] }
+    else it.overrides[m] = amount
+  }
+
+  /** month: the month the item was edited from (where a new amount of a recurring item applies). */
+  function updateItem(id, { amount, month, itemMonth, repeat, ...rest }) {
     const it = findItem(id)
     if (!it) return
-    if (itemMonth && itemMonth !== it.month && !it.repeat) {
-      if (it.done[it.month]) { delete it.done[it.month]; it.done[itemMonth] = true }
-      it.month = itemMonth
-    }
     Object.assign(it, rest)
-    if (amount !== undefined) {
-      if (!it.repeat) {
-        it.amount = amount
-      } else if (scope === 'month') {
-        it.overrides[month] = amount
-      } else if (month <= it.month) {
-        it.amount = amount
-        it.changes = {}
-        delete it.overrides[month]
-      } else {
-        for (const k of Object.keys(it.changes)) if (k > month) delete it.changes[k]
-        for (const k of Object.keys(it.overrides)) if (k >= month) delete it.overrides[k]
-        it.changes[month] = amount
+    if (it.repeat && repeat === false) {
+      // No longer repeats: a single entry in itemMonth, with the value it had where it was edited.
+      const at = itemMonth || it.month
+      it.amount = amount ?? itemAmount(it, month)
+      it.done = it.done[at] ? { [at]: true } : {}
+      Object.assign(it, { month: at, repeat: false, endMonth: null, changes: {}, overrides: {}, skips: [] })
+    } else if (it.repeat) {
+      if (amount !== undefined) setValue(it, month, amount)
+    } else {
+      if (itemMonth && itemMonth !== it.month) {
+        if (it.done[it.month]) { delete it.done[it.month]; it.done[itemMonth] = true }
+        it.month = itemMonth
       }
+      if (amount !== undefined) it.amount = amount
+      if (repeat) it.repeat = true
     }
+    touch(it)
+  }
+
+  /** Answers "same as last month or a new value?" for month m. */
+  function setItemValue(id, m, amount, markDone = false) {
+    const it = findItem(id)
+    if (!it) return
+    setValue(it, m, amount)
+    if (markDone) it.done[m] = true
     touch(it)
   }
 
@@ -251,7 +259,7 @@ export const useFinance = defineStore('finance', () => {
     setBalance,
     addCard, updateCard, removeCard, setInvoiceTotal, toggleInvoicePaid,
     addPurchase, updatePurchase, removePurchase, toggleShareReceived,
-    addItem, updateItem, removeItem, toggleItemDone,
+    addItem, updateItem, setItemValue, removeItem, toggleItemDone,
     importData, resetAll, backupBlob,
   }
 })

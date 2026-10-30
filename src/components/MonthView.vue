@@ -64,10 +64,14 @@ function itemRow(r) {
   const bits = []
   if (isOwed && it.description) bits.push(it.description)
   if (it.repeat) bits.push('todo mês')
+  // A recurring value repeated from an earlier month: once the month arrives, ask for the real one.
+  const ask = r.estimated && m.value <= store.today
+  if (ask) bits.push('confirme o valor')
+  const askValue = markDone => openSheet('value', { id: it.id, month: m.value, markDone })
   return {
-    key: it.id, title, sub: bits.join(' · '), amount: r.amount, done: r.done,
-    toggle: () => store.toggleItemDone(it.id, m.value),
-    open: () => openSheet('entry', { id: it.id, kind: it.kind, month: m.value }),
+    key: it.id, title, sub: bits.join(' · '), amount: r.amount, done: r.done, warn: ask,
+    toggle: () => (r.estimated ? askValue(true) : store.toggleItemDone(it.id, m.value)),
+    open: () => (ask ? askValue(false) : openSheet('entry', { id: it.id, kind: it.kind, month: m.value })),
   }
 }
 
@@ -100,7 +104,7 @@ function progress(rows, word) {
 }
 
 const groups = computed(() => {
-  const sum = past.value ? s.value.all : s.value.pending
+  const sum = s.value.all
   const list = [
     { id: 'incomes', op: '+', label: 'Entradas', total: sum.incomes, rows: s.value.incomes.map(itemRow),
       addLabel: 'Adicionar entrada', doneWord: 'recebido', add: () => openSheet('entry', { kind: 'income', month: m.value }) },
@@ -168,7 +172,7 @@ const showOnboarding = computed(() => !store.prefs.onboardingDone)
     </section>
 
     <p v-if="!past" class="footnote">
-      O que está marcado como pago ou recebido já saiu (ou entrou) no "Tenho agora", então não entra de novo na conta.
+      Marcar como pago ou recebido é só para acompanhar: o valor continua contando na conta do mês.
     </p>
   </div>
 </template>

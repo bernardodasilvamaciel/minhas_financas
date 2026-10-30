@@ -9,13 +9,14 @@ import { toCents, fromCents, sum } from './money'
   purchases: { id, cardId, description, amount, installments, invoiceMonth, date, person, received: { [month]: true }, updatedAt }
              amount is the full price; it is split across `installments` invoices starting at invoiceMonth.
   items:     { id, kind: 'income' | 'bill' | 'receivable', description, person, amount, month, repeat, endMonth,
-               changes: { [month]: amount },   — new value from that month on (recurring only)
-               overrides: { [month]: amount }, — value for that month only
+               changes: { [month]: amount },   — (older data) new value from that month on
+               overrides: { [month]: amount }, — the value given for that month (recurring only)
                skips: [month], done: { [month]: true }, updatedAt }
   deleted:   { [id]: timestamp }                     — tombstones, so merging two devices doesn't resurrect deletions
 
-  Rule of thumb for the projection: anything marked as paid/received is assumed to be
-  already reflected in "Tenho agora", so it is never counted again.
+  A recurring item's value can change every month: a month without a value of its own
+  repeats the latest one before it, and the app asks to confirm it once the month arrives.
+  Marking something as paid/received is only a checklist: it never changes the totals.
 */
 
 export const KINDS = {
@@ -43,15 +44,21 @@ export function itemOccurs(item, m) {
   return !item.endMonth || m <= item.endMonth
 }
 
-export function itemAmount(item, m) {
-  if (item.overrides && m in item.overrides) return item.overrides[m]
-  let amount = item.amount
-  if (item.changes) {
-    let best = ''
-    for (const k of Object.keys(item.changes)) if (k <= m && k > best) best = k
-    if (best) amount = item.changes[best]
-  }
-  return amount
+/** The value for month m, and the month it comes from (m itself, or the latest one before it). */
+export function itemValue(item, m) {
+  const overrides = item.overrides || {}
+  if (m in overrides) return { amount: overrides[m], from: m }
+  let amount = item.amount, from = item.month
+  for (const [k, v] of Object.entries(item.changes || {})) if (k <= m && k > from) { amount = v; from = k }
+  for (const [k, v] of Object.entries(overrides)) if (k < m && k >= from) { amount = v; from = k }
+  return { amount, from }
+}
+
+export const itemAmount = (item, m) => itemValue(item, m).amount
+
+/** Whether the value for month m was typed or accepted, rather than repeated from an earlier month. */
+export function itemConfirmed(item, m) {
+  return !item.repeat || m === item.month || m in (item.overrides || {}) || m in (item.changes || {}) || !!item.done?.[m]
 }
 
 // ── Cards & purchases ────────────────────────────────────────────────────
@@ -107,7 +114,8 @@ export function monthSummary(data, m) {
 
   for (const item of data.items) {
     if (!itemOccurs(item, m)) continue
-    const row = { type: 'item', item, amount: itemAmount(item, m), done: !!item.done?.[m] }
+    const { amount, from } = itemValue(item, m)
+    const row = { type: 'item', item, amount, from, estimated: !itemConfirmed(item, m), done: !!item.done?.[m] }
     if (item.kind === 'income') incomes.push(row)
     else if (item.kind === 'bill') bills.push(row)
     else owed.push(row)
@@ -131,7 +139,6 @@ export function monthSummary(data, m) {
   const byAmountDesc = (a, b) => b.amount - a.amount
   incomes.sort(byAmountDesc); bills.sort(byAmountDesc); owed.sort(byAmountDesc)
 
-  const pending = list => sum(list.filter(r => !r.done), r => r.amount)
   const all = list => sum(list, r => r.amount)
 
   return {
@@ -141,33 +148,28 @@ export function monthSummary(data, m) {
       incomes: all(incomes), owed: all(owed), bills: all(bills),
       invoices: sum(invoices, i => i.total),
     },
-    pending: {
-      incomes: pending(incomes), owed: pending(owed), bills: pending(bills),
-      invoices: sum(invoices.filter(i => !i.paid), i => i.total),
-    },
   }
 }
 
 /**
  * Month-by-month projection.
  * Past months show their own result (in − out). From the current month on,
- * the balance carries over: opening + pending in − pending out = closing.
+ * the balance carries over: opening + in − out = closing.
  */
 export function projection(data, from, to, today = monthKey()) {
   const rows = {}
   let carry = data.balance?.amount || 0
   for (const m of monthRange(from < today ? from : today, to)) {
     const s = monthSummary(data, m)
+    const result = fromCents(
+      toCents(s.all.incomes) + toCents(s.all.owed) - toCents(s.all.bills) - toCents(s.all.invoices)
+    )
     if (m < today) {
-      const result = s.all.incomes + s.all.owed - s.all.bills - s.all.invoices
       rows[m] = { month: m, past: true, summary: s, opening: 0, closing: result, result }
       continue
     }
     const opening = carry
-    const closing = fromCents(
-      toCents(opening) + toCents(s.pending.incomes) + toCents(s.pending.owed)
-      - toCents(s.pending.bills) - toCents(s.pending.invoices)
-    )
+    const closing = fromCents(toCents(opening) + toCents(result))
     rows[m] = { month: m, past: false, summary: s, opening, closing }
     carry = closing
   }

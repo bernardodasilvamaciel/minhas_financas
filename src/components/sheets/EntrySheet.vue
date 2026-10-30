@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useFinance } from '../../stores/finance'
-import { KINDS, CARD_COLORS, defaultInvoiceMonth, itemAmount, knownDescriptions, knownPeople } from '../../lib/finance'
+import { KINDS, CARD_COLORS, defaultInvoiceMonth, itemAmount, itemOccurs, knownDescriptions, knownPeople } from '../../lib/finance'
 import { monthName, addMonths } from '../../lib/months'
 import { brl, toCents, fromCents } from '../../lib/money'
 import Sheet from '../ui/Sheet.vue'
@@ -15,6 +15,7 @@ const props = defineProps({
   month: { type: String, default: null },          // month the sheet was opened from
   cardId: { type: String, default: null },
   invoiceMonth: { type: String, default: null },
+  repeat: Boolean,                                 // start with "Repete todo mês" on
 })
 const emit = defineEmits(['close'])
 const store = useFinance()
@@ -32,8 +33,8 @@ const description = ref('')
 const person = ref('')
 const forOther = ref(false)
 const month = ref(ctxMonth)
-const repeat = ref(kind.value === 'bill' || kind.value === 'income')
-const scope = ref('forward')
+// Off by default: a one-off (like the 13º) repeating by mistake would inflate every month after it.
+const repeat = ref(props.repeat)
 
 const cards = computed(() => store.data.cards)
 const lastCard = cards.value.find(c => c.id === store.prefs.lastCardId)
@@ -56,12 +57,11 @@ if (record && props.kind === 'purchase') {
   amount.value = itemAmount(record, ctxMonth)
   description.value = record.description
   person.value = record.person
-  month.value = record.repeat ? ctxMonth : record.month
+  month.value = record.month
   repeat.value = record.repeat
 }
 const originalAmount = amount.value
 
-watch(kind, k => { repeat.value = k === 'bill' || k === 'income' })
 watch(cardId, id => {
   if (!invoiceTouched) invoiceMonth.value = defaultInvoiceMonth(cards.value.find(c => c.id === id))
 })
@@ -78,6 +78,22 @@ const amountChanged = computed(() => toCents(amount.value) !== toCents(originalA
 const suggestions = computed(() => knownDescriptions(store.data, kind.value))
 const people = computed(() => knownPeople(store.data))
 
+// A name used before: offer its last value, or point out that it already repeats into this month.
+const sameName = computed(() => {
+  const name = description.value.trim().toLowerCase()
+  if (editing || !name || kind.value === 'purchase' || kind.value === 'receivable') return null
+  const matches = store.data.items.filter(i => i.kind === kind.value && i.description.trim().toLowerCase() === name)
+  const here = matches.find(i => i.repeat && itemOccurs(i, month.value))
+  if (here) return { here }
+  let best = null
+  for (const i of matches) {
+    const at = !i.repeat ? i.month
+      : i.endMonth && i.endMonth < month.value ? i.endMonth : addMonths(month.value, -1)
+    if (at >= i.month && (!best || at > best.at)) best = { at, amount: itemAmount(i, at) }
+  }
+  return best
+})
+
 const canSave = computed(() => amount.value > 0 && (kind.value !== 'purchase' || !!cardId.value))
 
 const title = editing ? KINDS[kind.value].label : 'Adicionar'
@@ -91,6 +107,10 @@ const placeholders = {
   bill: 'Aluguel, luz, internet…',
   income: 'Salário, freela…',
   receivable: 'Do quê? (opcional)',
+}
+const repeatHints = {
+  income: 'Como salário. O valor pode mudar: todo mês o app pergunta.',
+  bill: 'Como luz e aluguel. O valor pode mudar: todo mês o app pergunta.',
 }
 const monthLabel = computed(() => {
   if (kind.value === 'bill') return repeat.value ? 'A partir de' : 'Vence em'
@@ -138,9 +158,7 @@ function submit() {
       store.updateItem(record.id, {
         description: desc, person: who,
         amount: amountChanged.value ? amount.value : undefined,
-        scope: scope.value, month: ctxMonth,
-        itemMonth: record.repeat ? undefined : month.value,
-        ...(record.repeat ? {} : { repeat: repeat.value }),
+        month: ctxMonth, itemMonth: month.value, repeat: repeat.value,
       })
       store.notify('Salvo')
     } else {
@@ -203,6 +221,15 @@ function remove(scopeChoice = 'all') {
         >
         <datalist id="desc-list"><option v-for="d in suggestions" :key="d" :value="d" /></datalist>
         <datalist id="people-list"><option v-for="n in people" :key="n" :value="n" /></datalist>
+        <p v-if="sameName?.here" class="hint warn">
+          “{{ sameName.here.description }}” já está em {{ monthName(month) }}, porque repete todo mês. Para mudar o valor, toque nele na lista.
+        </p>
+        <button
+          v-else-if="sameName && toCents(sameName.amount) !== toCents(amount)" type="button"
+          class="chip ghost same" @click="amount = sameName.amount"
+        >
+          Mesmo valor de {{ monthName(sameName.at) }}: <span class="num">{{ brl(sameName.amount) }}</span>
+        </button>
       </div>
 
       <!-- Purchase -->
@@ -251,21 +278,16 @@ function remove(scopeChoice = 'all') {
 
       <!-- Bills, incomes, receivables -->
       <template v-else>
-        <div v-if="!isRecurringEdit" class="field-block">
+        <div v-if="!isRecurringEdit || !repeat" class="field-block">
           <span class="field-label">{{ monthLabel }}</span>
           <MonthPicker v-model="month" />
         </div>
-        <div v-if="!isRecurringEdit" class="field-block">
-          <Toggle v-model="repeat" label="Repete todo mês" :hint="kind === 'income' ? 'Como salário' : kind === 'bill' ? 'Como aluguel e internet' : ''" />
+        <div class="field-block">
+          <Toggle v-model="repeat" label="Repete todo mês" :hint="repeatHints[kind] || ''" />
         </div>
-        <div v-if="isRecurringEdit && amountChanged" class="field-block">
-          <span class="field-label">Mudar o valor</span>
-          <div class="chips">
-            <button type="button" class="chip" :aria-pressed="scope === 'month'" @click="scope = 'month'">Só em {{ monthName(ctxMonth) }}</button>
-            <button type="button" class="chip" :aria-pressed="scope === 'forward'" @click="scope = 'forward'">De {{ monthName(ctxMonth) }} em diante</button>
-          </div>
-        </div>
-        <p v-if="isRecurringEdit" class="hint tight">Repete todo mês desde {{ monthName(record.month) }}.</p>
+        <p v-if="isRecurringEdit && repeat" class="hint tight">
+          Repete todo mês desde {{ monthName(record.month) }}. O valor de {{ monthName(ctxMonth) }} se repete nos meses seguintes até você informar outro.
+        </p>
       </template>
 
       <!-- Delete -->
@@ -312,6 +334,9 @@ function remove(scopeChoice = 'all') {
 .stepper button:disabled { opacity: .3; }
 .stepper output { min-width: 40px; text-align: center; font-weight: 600; }
 .hint.tight { margin-top: -10px; }
+.field-block > .hint { margin-top: 0; }
+.hint.warn { color: var(--blue); font-weight: 500; }
+.chip.same { align-self: flex-start; font-size: 14px; min-height: 36px; }
 .danger { padding-top: 4px; border-top: 1px solid var(--rule); }
 .danger .link { padding-top: 14px; }
 .confirm { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 14px; }
