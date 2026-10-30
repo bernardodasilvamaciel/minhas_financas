@@ -35,8 +35,7 @@ export const useFinance = defineStore('finance', () => {
     if (document.visibilityState === 'visible') today.value = monthKey()
   })
 
-  // You spend on credit now and pay next month, so next month is the default view.
-  const selected = ref(addMonths(today.value, 1))
+  const selected = ref(today.value)
 
   const range = computed(() => {
     const months = dataMonths(data.value)
