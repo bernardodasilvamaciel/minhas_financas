@@ -83,13 +83,29 @@ function meta(inv) {
   max-width: 420px; margin: 0 auto 18px;
   container-type: inline-size;
 }
-.slot { --on: #fff; position: relative; isolation: isolate; }
+.slot {
+  --on: #fff;
+  position: relative; isolation: isolate;
+  transition: transform .35s cubic-bezier(.2, .8, .2, 1);
+}
 .slot.light { --on: #14202F; }
 /* a card is 1/1.586 of the wallet's width tall; pull each one up over the one before */
 .slot + .slot { margin-top: calc(var(--strip) - 100cqw / 1.586); }
 
-.open { position: absolute; inset: 0; border-radius: 18px; }
+.open { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; }
 .open:active { background: rgb(255 255 255 / .07); }
+/* a band of light that sweeps across the card on hover */
+.open::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / .3) 50%, transparent 65%);
+  transform: translateX(-110%);
+}
+
+/* Hover: the card slides a little out of the wallet and catches the light. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .slot:hover { transform: translateY(-10px); }
+  .slot:hover .open::before { transform: translateX(110%); transition: transform .75s ease; }
+}
 
 .pay {
   position: absolute; top: 44px; right: 14px; z-index: 1;
