@@ -42,10 +42,8 @@ export const useFinance = defineStore('finance', () => {
     const months = dataMonths(data.value)
     const earliest = [addMonths(today.value, -1), months[0], start.value].filter(Boolean).sort()[0]
     const from = earliest < addMonths(today.value, -12) ? addMonths(today.value, -12) : earliest
-    let to = addMonths(today.value, 11)
-    const last = months[months.length - 1]
-    if (last && last > to) to = last < addMonths(today.value, 35) ? last : addMonths(today.value, 35)
-    return { from, to }
+    // Only one month ahead: a new one shows up as each month turns.
+    return { from, to: addMonths(today.value, 1) }
   })
 
   const proj = computed(() => projection(data.value, range.value.from, range.value.to, today.value))
