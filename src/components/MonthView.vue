@@ -16,7 +16,6 @@ const row = computed(() => store.view)
 const m = computed(() => row.value.month)
 const s = computed(() => row.value.summary)
 const past = computed(() => row.value.past)
-const isNow = computed(() => m.value === store.today)
 const total = computed(() => row.value.closing)
 const big = computed(() => splitMoney(total.value))
 const name = computed(() => monthName(m.value))
@@ -32,18 +31,19 @@ const sub = computed(() => {
 })
 
 // ── Opening line ───────────────────────────────────────────────────────────
+// The month of the "Tenho agora" opens with it; every month after opens with what the one before left.
 const balance = computed(() => store.data.balance)
 const opening = computed(() => {
-  if (isNow.value) {
+  if (m.value === store.start) {
     const b = balance.value
-    const stale = b && b.date && b.date.slice(0, 7) < store.today
+    const earlier = m.value < store.today
     return {
-      label: 'Tenho agora',
+      label: b && earlier ? `Tinha em ${formatDay(b.date)}` : 'Tenho agora',
       value: b ? b.amount : null,
       sub: !b ? 'Toque para dizer quanto você tem hoje'
-        : stale ? `Valor de ${formatDay(b.date)} — toque para atualizar`
+        : earlier ? 'A conta começa daqui · toque para corrigir'
         : `Atualizado em ${formatDay(b.date)}`,
-      warn: !b || stale,
+      warn: !b,
       action: () => openSheet('balance'),
     }
   }

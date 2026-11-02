@@ -4,7 +4,7 @@ import { toCents, fromCents, sum } from './money'
 /*
   Data shape (v1)
   ───────────────
-  balance:   { amount, date, updatedAt } | null      — "Tenho agora"
+  balance:   { amount, date, updatedAt } | null      — "Tenho agora": what there was on `date`, before that month's entries and bills
   cards:     { id, name, closingDay, dueDay, color, invoices: { [month]: { total, paid } }, updatedAt }
   purchases: { id, cardId, description, amount, installments, invoiceMonth, date, person, received: { [month]: true }, updatedAt }
              amount is the full price; it is split across `installments` invoices starting at invoiceMonth.
@@ -162,20 +162,28 @@ export function monthSummary(data, m) {
   }
 }
 
+/** The month the "Tenho agora" was given in: the running balance starts there, and it stays put as months go by. */
+export function balanceMonth(data, today = monthKey()) {
+  const m = data.balance?.date?.slice(0, 7)
+  return m && m < today ? m : today
+}
+
 /**
  * Month-by-month projection.
- * Past months show their own result (in − out). From the current month on,
- * the balance carries over: opening + in − out = closing.
+ * From the month of the "Tenho agora" on, the balance carries over:
+ * opening + in − out = closing, and each closing opens the next month.
+ * Months before it only show their own result (in − out).
  */
 export function projection(data, from, to, today = monthKey()) {
   const rows = {}
+  const start = balanceMonth(data, today)
   let carry = data.balance?.amount || 0
-  for (const m of monthRange(from < today ? from : today, to)) {
+  for (const m of monthRange(from < start ? from : start, to)) {
     const s = monthSummary(data, m)
     const result = fromCents(
       toCents(s.all.incomes) + toCents(s.all.owed) - toCents(s.all.bills) - toCents(s.all.invoices)
     )
-    if (m < today) {
+    if (m < start) {
       rows[m] = { month: m, past: true, summary: s, opening: 0, closing: result, result }
       continue
     }

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
-import { emptyData, uid, projection, dataMonths, defaultInvoiceMonth, itemAmount } from '../lib/finance'
+import { emptyData, uid, projection, balanceMonth, dataMonths, defaultInvoiceMonth, itemAmount } from '../lib/finance'
 import { loadData, saveData, loadPrefs, savePrefs, normalize } from '../lib/storage'
 import { mergeData } from '../lib/sync'
 import { monthKey, addMonths, todayISO } from '../lib/months'
@@ -36,11 +36,12 @@ export const useFinance = defineStore('finance', () => {
   })
 
   const selected = ref(today.value)
+  const start = computed(() => balanceMonth(data.value, today.value))
 
   const range = computed(() => {
     const months = dataMonths(data.value)
-    let from = addMonths(today.value, -1)
-    if (months[0] && months[0] < from) from = months[0] < addMonths(today.value, -12) ? addMonths(today.value, -12) : months[0]
+    const earliest = [addMonths(today.value, -1), months[0], start.value].filter(Boolean).sort()[0]
+    const from = earliest < addMonths(today.value, -12) ? addMonths(today.value, -12) : earliest
     let to = addMonths(today.value, 11)
     const last = months[months.length - 1]
     if (last && last > to) to = last < addMonths(today.value, 35) ? last : addMonths(today.value, 35)
@@ -80,7 +81,10 @@ export const useFinance = defineStore('finance', () => {
 
   // ── Balance ─────────────────────────────────────────────────────────────
   function setBalance(amount) {
-    data.value.balance = { amount, date: todayISO(), updatedAt: now() }
+    // Correcting a "Tenho agora" from an earlier month keeps it there, where the running balance starts.
+    const b = data.value.balance
+    const date = b?.date && b.date.slice(0, 7) < today.value ? b.date : todayISO()
+    data.value.balance = { amount, date, updatedAt: now() }
   }
 
   // ── Cards ───────────────────────────────────────────────────────────────
@@ -254,7 +258,7 @@ export const useFinance = defineStore('finance', () => {
 
   return {
     data, prefs, migratedFrom,
-    today, selected, range, proj, view, select,
+    today, start, selected, range, proj, view, select,
     toast, notify, undo,
     setBalance,
     addCard, updateCard, removeCard, setInvoiceTotal, toggleInvoicePaid,

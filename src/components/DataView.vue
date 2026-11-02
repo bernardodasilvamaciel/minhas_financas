@@ -149,7 +149,7 @@ const THEMES = [
 
     <details class="box how">
       <summary><h2>Como a conta é feita</h2></summary>
-      <p>Cada mês começa com o que sobrou do mês anterior. No mês atual, começa com o “Tenho agora”.</p>
+      <p>A conta começa no mês em que você disse quanto tinha (“Tenho agora”). Dali em diante, cada mês começa com o que sobrou do anterior.</p>
       <p>Soma o que entra (salário, quem te deve) e tira o que sai (faturas e contas). O resultado é o que sobra no fim do mês, e passa para o próximo.</p>
       <p>Compras parceladas aparecem em cada fatura, uma parcela por mês. A fatura em que a compra cai depende do dia de fechamento do cartão.</p>
       <p>O que repete todo mês usa o valor do mês anterior como previsão. Quando o mês chega, o app pergunta se o valor foi o mesmo ou outro.</p>

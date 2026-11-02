@@ -12,7 +12,7 @@ const scroller = ref(null)
 
 const months = computed(() => monthRange(store.range.from, store.range.to).map(m => {
   const row = store.proj[m]
-  return { key: m, value: row ? row.closing : 0, past: m < store.today }
+  return { key: m, value: row ? row.closing : 0, past: m < store.today, result: !!row?.past }
 }))
 
 const scale = computed(() => {
@@ -49,7 +49,7 @@ onMounted(() => nextTick(() => center(false)))
         v-for="m in months" :key="m.key"
         class="mo" :class="{ past: m.past, neg: m.value < 0, now: m.key === store.today }"
         role="tab" :aria-selected="m.key === store.selected"
-        :aria-label="`${monthName(m.key, { year: true })}: ${m.past ? 'resultado' : 'sobra'} ${compact(m.value)}`"
+        :aria-label="`${monthName(m.key, { year: true })}: ${m.result ? 'resultado' : 'sobra'} ${compact(m.value)}`"
         @click="store.select(m.key)"
       >
         <span v-if="m.key === store.today" class="now-dot" aria-hidden="true" />
