@@ -16,6 +16,7 @@ const row = computed(() => store.view)
 const m = computed(() => row.value.month)
 const s = computed(() => row.value.summary)
 const past = computed(() => row.value.past)
+const isNow = computed(() => m.value === store.today)
 const total = computed(() => row.value.closing)
 const big = computed(() => splitMoney(total.value))
 const name = computed(() => monthName(m.value))
@@ -31,28 +32,31 @@ const sub = computed(() => {
 })
 
 // ── Opening line ───────────────────────────────────────────────────────────
-// The month of the "Tenho agora" opens with it; every month after opens with what the one before left.
-const balance = computed(() => store.data.balance)
+// A month opens with what the one before left, or with a value of its own (in the bank and/or in cash).
+// Up to the current month, tapping it lets you choose; later months just point back.
 const opening = computed(() => {
-  if (m.value === store.start) {
-    const b = balance.value
-    const earlier = m.value < store.today
+  const r = row.value
+  const prev = addMonths(m.value, -1)
+  const choose = () => openSheet('balance', { month: m.value })
+  if (r.own) {
+    const { bank, cash, date } = r.own
+    const where = bank && cash ? `${p(bank)} no banco + ${p(cash)} em espécie` : cash ? 'Em espécie' : 'No banco'
     return {
-      label: b && earlier ? `Tinha em ${formatDay(b.date)}` : 'Tenho agora',
-      value: b ? b.amount : null,
-      sub: !b ? 'Toque para dizer quanto você tem hoje'
-        : earlier ? 'A conta começa daqui · toque para corrigir'
-        : `Atualizado em ${formatDay(b.date)}`,
-      warn: !b,
-      action: () => openSheet('balance'),
+      label: isNow.value ? 'Tenho agora' : 'Comecei com',
+      value: r.opening,
+      sub: isNow.value && date ? `${where} · atualizado em ${formatDay(date)}` : where,
+      action: choose,
     }
   }
-  const prev = addMonths(m.value, -1)
+  if (r.carried === null) {
+    return { label: 'Tenho agora', value: null, sub: 'Toque para dizer quanto você tem hoje', warn: true, action: choose }
+  }
+  const editable = m.value <= store.today
   return {
-    label: `${row.value.opening < 0 ? 'Falta' : 'Sobra'} de ${monthName(prev)}`,
-    value: row.value.opening,
-    sub: `Ver ${monthName(prev)}`,
-    action: () => store.select(prev),
+    label: `${r.opening < 0 ? 'Falta' : 'Sobra'} de ${monthName(prev)}`,
+    value: r.opening,
+    sub: editable ? 'Toque para usar outro valor' : `Ver ${monthName(prev)}`,
+    action: editable ? choose : () => store.select(prev),
   }
 })
 
@@ -229,7 +233,7 @@ const showOnboarding = computed(() => !store.prefs.onboardingDone)
   border-bottom: 1px solid var(--rule);
 }
 .o-text { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 0; min-width: 0; }
-.o-label { font-size: 17px; font-weight: 600; white-space: nowrap; }
+.o-label { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .o-sub { font-size: 13.5px; color: var(--ink-3); }
 .warn .o-sub { color: var(--blue); font-weight: 500; }
 /* paddings on the right column line up with the groups' chevrons */

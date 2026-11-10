@@ -1,4 +1,5 @@
 import { normalize } from './storage'
+import { latestOpening } from './finance'
 
 // A transfer code is the whole data set, deflated and base64url-encoded:
 //   MF1.<base64url(deflate-raw(json))>   — compressed
@@ -120,15 +121,18 @@ function mergeList(a, b, deleted) {
 export function mergeData(local, incoming) {
   const deleted = { ...local.deleted }
   for (const [id, ts] of Object.entries(incoming.deleted || {})) deleted[id] = Math.max(deleted[id] || 0, ts)
-  const pickBalance = () => {
-    const a = local.balance, b = incoming.balance
-    if (!a) return b
-    if (!b) return a
-    return (b.updatedAt || 0) > (a.updatedAt || 0) ? b : a
+  // Openings are kept per month; going back to "what the month before left" leaves an `opening:<month>` tombstone.
+  const openings = { ...local.openings }
+  for (const [m, o] of Object.entries(incoming.openings || {})) {
+    if (!openings[m] || (o.updatedAt || 0) > (openings[m].updatedAt || 0)) openings[m] = o
+  }
+  for (const m of Object.keys(openings)) {
+    const gone = deleted[`opening:${m}`]
+    if (gone && gone >= (openings[m].updatedAt || 0)) delete openings[m]
   }
   return {
     v: 1,
-    balance: pickBalance(),
+    openings,
     cards: mergeList(local.cards, incoming.cards, deleted),
     purchases: mergeList(local.purchases, incoming.purchases, deleted),
     items: mergeList(local.items, incoming.items, deleted),
@@ -141,6 +145,6 @@ export function describeData(d) {
     cards: d.cards.length,
     purchases: d.purchases.length,
     items: d.items.length,
-    balance: d.balance?.amount ?? null,
+    balance: latestOpening(d)?.amount ?? null,
   }
 }

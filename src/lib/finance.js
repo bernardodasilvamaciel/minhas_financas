@@ -4,7 +4,8 @@ import { toCents, fromCents, sum } from './money'
 /*
   Data shape (v1)
   ───────────────
-  balance:   { amount, date, updatedAt } | null      — "Tenho agora": what there was on `date`, before that month's entries and bills
+  openings:  { [month]: { bank, cash, date, updatedAt } } — what there was at the start of that month ("Tenho agora"),
+             in the bank and in cash, before its entries and bills. A month without one opens with what the one before left.
   cards:     { id, name, closingDay, dueDay, color, invoices: { [month]: { total, paid } }, updatedAt }
   purchases: { id, cardId, description, amount, installments, invoiceMonth, date, person, received: { [month]: true }, updatedAt }
              amount is the full price; it is split across `installments` invoices starting at invoiceMonth.
@@ -43,7 +44,7 @@ export const uid = () =>
   Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 7)
 
 export function emptyData() {
-  return { v: 1, balance: null, cards: [], purchases: [], items: [], deleted: {} }
+  return { v: 1, openings: {}, cards: [], purchases: [], items: [], deleted: {} }
 }
 
 // ── Items (bills, incomes, receivables) ──────────────────────────────────
@@ -162,22 +163,32 @@ export function monthSummary(data, m) {
   }
 }
 
-/** The month the "Tenho agora" was given in: the running balance starts there, and it stays put as months go by. */
-export function balanceMonth(data, today = monthKey()) {
-  const m = data.balance?.date?.slice(0, 7)
-  return m && m < today ? m : today
+// ── Openings ("Tenho agora") ─────────────────────────────────────────────
+
+export const openingAmount = o => fromCents(toCents(o.bank) + toCents(o.cash))
+
+/** The first month with a value of its own: the running balance starts there. */
+export function startMonth(data, today = monthKey()) {
+  const first = Object.keys(data.openings).sort()[0]
+  return first && first < today ? first : today
+}
+
+/** The latest month with a value of its own, with that value. */
+export function latestOpening(data) {
+  const m = Object.keys(data.openings).sort().pop()
+  return m ? { month: m, amount: openingAmount(data.openings[m]) } : null
 }
 
 /**
  * Month-by-month projection.
- * From the month of the "Tenho agora" on, the balance carries over:
- * opening + in − out = closing, and each closing opens the next month.
- * Months before it only show their own result (in − out).
+ * From the first month with a "Tenho agora" on, the balance carries over:
+ * opening + in − out = closing, and each closing opens the next month,
+ * unless that month has a value of its own. Months before it only show their own result (in − out).
  */
 export function projection(data, from, to, today = monthKey()) {
   const rows = {}
-  const start = balanceMonth(data, today)
-  let carry = data.balance?.amount || 0
+  const start = startMonth(data, today)
+  let carry = 0
   for (const m of monthRange(from < start ? from : start, to)) {
     const s = monthSummary(data, m)
     const result = fromCents(
@@ -187,9 +198,10 @@ export function projection(data, from, to, today = monthKey()) {
       rows[m] = { month: m, past: true, summary: s, opening: 0, closing: result, result }
       continue
     }
-    const opening = carry
+    const own = data.openings[m] || null
+    const opening = own ? openingAmount(own) : carry
     const closing = fromCents(toCents(opening) + toCents(result))
-    rows[m] = { month: m, past: false, summary: s, opening, closing }
+    rows[m] = { month: m, past: false, summary: s, own, carried: m > start ? carry : null, opening, closing }
     carry = closing
   }
   return rows

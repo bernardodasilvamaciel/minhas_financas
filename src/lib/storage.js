@@ -16,8 +16,16 @@ export function normalize(raw) {
   const now = Date.now()
   const out = emptyData()
 
+  for (const [m, o] of Object.entries(obj(d.openings))) {
+    if (isMonth(m) && o && typeof o === 'object') {
+      out.openings[m] = { bank: num(o.bank), cash: num(o.cash), date: str(o.date), updatedAt: num(o.updatedAt) || now }
+    }
+  }
+  // Older data kept a single "Tenho agora": it becomes the opening of the month it was given in.
   if (d.balance && typeof d.balance === 'object') {
-    out.balance = { amount: num(d.balance.amount), date: str(d.balance.date), updatedAt: num(d.balance.updatedAt) || now }
+    const date = str(d.balance.date)
+    const m = isMonth(date.slice(0, 7)) ? date.slice(0, 7) : monthKey()
+    out.openings[m] ||= { bank: num(d.balance.amount), cash: 0, date, updatedAt: num(d.balance.updatedAt) || now }
   }
 
   out.cards = (Array.isArray(d.cards) ? d.cards : []).filter(c => c && c.id).map((c, i) => ({

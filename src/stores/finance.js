@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
-import { emptyData, uid, projection, balanceMonth, dataMonths, defaultInvoiceMonth, itemAmount } from '../lib/finance'
+import { emptyData, uid, projection, startMonth, dataMonths, defaultInvoiceMonth, itemAmount } from '../lib/finance'
 import { loadData, saveData, loadPrefs, savePrefs, normalize } from '../lib/storage'
 import { mergeData } from '../lib/sync'
 import { monthKey, addMonths, todayISO } from '../lib/months'
@@ -36,7 +36,7 @@ export const useFinance = defineStore('finance', () => {
   })
 
   const selected = ref(today.value)
-  const start = computed(() => balanceMonth(data.value, today.value))
+  const start = computed(() => startMonth(data.value, today.value))
 
   const range = computed(() => {
     const months = dataMonths(data.value)
@@ -77,12 +77,16 @@ export const useFinance = defineStore('finance', () => {
   const findPurchase = id => data.value.purchases.find(p => p.id === id)
   const findItem = id => data.value.items.find(i => i.id === id)
 
-  // ── Balance ─────────────────────────────────────────────────────────────
-  function setBalance(amount) {
-    // Correcting a "Tenho agora" from an earlier month keeps it there, where the running balance starts.
-    const b = data.value.balance
-    const date = b?.date && b.date.slice(0, 7) < today.value ? b.date : todayISO()
-    data.value.balance = { amount, date, updatedAt: now() }
+  // ── Openings ("Tenho agora") ────────────────────────────────────────────
+  function setOpening(m, { bank, cash }) {
+    data.value.openings[m] = { bank, cash, date: todayISO(), updatedAt: now() }
+  }
+
+  /** Back to opening with what the month before left. */
+  function clearOpening(m) {
+    if (!data.value.openings[m]) return
+    delete data.value.openings[m]
+    tombstone(`opening:${m}`)
   }
 
   // ── Cards ───────────────────────────────────────────────────────────────
@@ -258,7 +262,7 @@ export const useFinance = defineStore('finance', () => {
     data, prefs, migratedFrom,
     today, start, selected, range, proj, view, select,
     toast, notify, undo,
-    setBalance,
+    setOpening, clearOpening,
     addCard, updateCard, removeCard, setInvoiceTotal, toggleInvoicePaid,
     addPurchase, updatePurchase, removePurchase, toggleShareReceived,
     addItem, updateItem, setItemValue, removeItem, toggleItemDone,

@@ -10,8 +10,8 @@ const steps = computed(() => [
   {
     label: 'Quanto você tem hoje',
     hint: 'na conta e guardado',
-    done: !!store.data.balance,
-    go: () => openSheet('balance'),
+    done: Object.keys(store.data.openings).length > 0,
+    go: () => openSheet('balance', { month: store.today }),
   },
   {
     label: 'O que entra todo mês',

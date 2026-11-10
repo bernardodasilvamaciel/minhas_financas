@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useFinance } from '../../stores/finance'
 import { useFmt } from '../../composables/useFmt'
+import { latestOpening } from '../../lib/finance'
+import { monthName } from '../../lib/months'
 import Sheet from '../ui/Sheet.vue'
 
 const props = defineProps({
@@ -16,10 +18,10 @@ const theirs = computed(() => ({
   cards: props.incoming.cards.length,
   purchases: props.incoming.purchases.length,
   items: props.incoming.items.length,
-  balance: props.incoming.balance,
+  opening: latestOpening(props.incoming),
 }))
 const localEmpty = computed(() =>
-  !store.data.cards.length && !store.data.purchases.length && !store.data.items.length && !store.data.balance)
+  !store.data.cards.length && !store.data.purchases.length && !store.data.items.length && !Object.keys(store.data.openings).length)
 
 function apply(mode) {
   store.importData(props.incoming, mode)
@@ -37,7 +39,7 @@ function apply(mode) {
         <li><span class="num">{{ theirs.cards }}</span> cartões</li>
         <li><span class="num">{{ theirs.purchases }}</span> compras</li>
         <li><span class="num">{{ theirs.items }}</span> contas, entradas e valores a receber</li>
-        <li v-if="theirs.balance">“Tenho agora”: <span class="num">{{ b(theirs.balance.amount) }}</span></li>
+        <li v-if="theirs.opening">Começo de {{ monthName(theirs.opening.month) }}: <span class="num">{{ b(theirs.opening.amount) }}</span></li>
       </ul>
 
       <template v-if="!localEmpty">

@@ -17,7 +17,7 @@ const counts = computed(() => ({
   items: store.data.items.length,
 }))
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
-const isEmpty = computed(() => !counts.value.cards && !counts.value.purchases && !counts.value.items && !store.data.balance)
+const isEmpty = computed(() => !counts.value.cards && !counts.value.purchases && !counts.value.items && !Object.keys(store.data.openings).length)
 
 async function sendLink() {
   busy.value = true
@@ -149,7 +149,7 @@ const THEMES = [
 
     <details class="box how">
       <summary><h2>Como a conta é feita</h2></summary>
-      <p>A conta começa no mês em que você disse quanto tinha (“Tenho agora”). Dali em diante, cada mês começa com o que sobrou do anterior.</p>
+      <p>A conta começa no mês em que você disse quanto tinha (“Tenho agora”). Dali em diante, cada mês começa com o que sobrou do anterior, ou com outro valor que você informar, no banco e em espécie.</p>
       <p>Soma o que entra (salário, quem te deve) e tira o que sai (faturas e contas). O resultado é o que sobra no fim do mês, e passa para o próximo.</p>
       <p>Compras parceladas aparecem em cada fatura, uma parcela por mês. A fatura em que a compra cai depende do dia de fechamento do cartão.</p>
       <p>O que repete todo mês usa o valor do mês anterior como previsão. Quando o mês chega, o app pergunta se o valor foi o mesmo ou outro.</p>
